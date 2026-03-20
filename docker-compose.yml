@@ -1,26 +1,10 @@
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: inventory
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d inventory"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+FROM maven:3.9.8-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-  worker:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      # local compose DB url (override .env if needed)
-      DATABASE_URL: postgres://postgres:postgres@db:5432/inventory
-    command: ["python", "-m", "inventory_alerts.cli", "run-worker"]
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY --from=build /app/target/postgres-inventory-alerts-0.0.1-SNAPSHOT.jar app.jar
+CMD ["java", "-jar", "app.jar", "run-worker"]

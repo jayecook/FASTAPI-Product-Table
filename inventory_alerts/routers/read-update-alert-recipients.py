@@ -1,7 +1,13 @@
 from fastapi import APIRouter, HTTPException
 from inventory_alerts.db import connect_db
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
+
+class AlertRecipientUpdateRequest(BaseModel):
+    email: Optional[str] = None
+    enabled: Optional[bool] = None
 
 #Alert Recipients/Read
 
@@ -43,16 +49,21 @@ def read_alert_recipient(recipient_id: int):
 
 #Update
 
-@router.put("/alert-recipients/{recipient_id}")
-def update_alert_recipient(recipient_id: int, data: dict):
-    allowed_fields = {"email", "enabled"}
+@router.patch("/alert-recipients/{recipient_id}")
+def update_alert_recipient(recipient_id: int, data: AlertRecipientUpdateRequest):
+    update_data = data.dict(exclude_unset=True)
+
+    if "email" in update_data and update_data["email"] is not None:
+        update_data["email"] = update_data["email"].strip()
+        if not update_data["email"]:
+            raise HTTPException(status_code=400, detail="Blank Email")
+
     updates = []
     values = []
 
-    for key, value in data.items():
-        if key in allowed_fields:
-            updates.append(f"{key} = %s")
-            values.append(value)
+    for key, value in update_data.items():
+        updates.append(f"{key} = %s")
+        values.append(value)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No Valid Fields To Update")

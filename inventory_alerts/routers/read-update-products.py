@@ -1,7 +1,15 @@
 from fastapi import APIRouter, HTTPException
 from inventory_alerts.db import connect_db
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
+
+class ProductUpdateRequest(BaseModel):
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    active: Optional[bool] = None
 
 #Products/Read
 
@@ -51,16 +59,26 @@ def read_product(product_id: int):
 
 #Products/Update
 
-@router.put("/products/{product_id}")
-def update_product(product_id: int, data: dict):
-    allowed_fields = {"sku", "name", "description", "active"}
+@router.patch("/products/{product_id}")
+def update_product(product_id: int, data: ProductUpdateRequest):
+    update_data = data.dict(exclude_unset=True)
+
+    if "sku" in update_data and update_data["sku"] is not None:
+        update_data["sku"] = update_data["sku"].strip()
+        if not update_data["sku"]:
+            raise HTTPException(status_code=400, detail="Blank SKU")
+
+    if "name" in update_data and update_data["name"] is not None:
+        update_data["name"] = update_data["name"].strip()
+        if not update_data["name"]:
+            raise HTTPException(status_code=400, detail="Blank Name")
+
     updates = []
     values = []
 
-    for key, value in data.items():
-        if key in allowed_fields:
-            updates.append(f"{key} = %s")
-            values.append(value)
+    for key, value in update_data.items():
+        updates.append(f"{key} = %s")
+        values.append(value)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No Fields To Update")

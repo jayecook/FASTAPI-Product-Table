@@ -1,7 +1,14 @@
 from fastapi import APIRouter, HTTPException
 from inventory_alerts.db import connect_db
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
+
+class ProductThresholdUpdateRequest(BaseModel):
+    threshold_qty: Optional[int] = None
+    cooldown: Optional[str] = None
+    enabled: Optional[bool] = None
 
 #Product thresholds/Read
 
@@ -47,16 +54,28 @@ def read_product_threshold(product_id: int):
 
 #Update
 
-@router.put("/product-thresholds/{product_id}")
-def update_product_threshold(product_id: int, data: dict):
-    allowed_fields = {"threshold_qty", "cooldown", "enabled"}
+@router.patch("/product-thresholds/{product_id}")
+def update_product_threshold(product_id: int, data: ProductThresholdUpdateRequest):
+    update_data = data.dict(exclude_unset=True)
+
+    if "threshold_qty" in update_data and update_data["threshold_qty"] is not None:
+        if update_data["threshold_qty"] < 0:
+            raise HTTPException(status_code=400, detail="Negative Threshold Quantity")
+
     updates = []
     values = []
 
-    for key, value in data.items():
-        if key in allowed_fields:
-            updates.append(f"{key} = %s")
-            values.append(value)
+    if "threshold_qty" in update_data:
+        updates.append("threshold_qty = %s")
+        values.append(update_data["threshold_qty"])
+
+    if "cooldown" in update_data:
+        updates.append("cooldown = %s::interval")
+        values.append(update_data["cooldown"])
+
+    if "enabled" in update_data:
+        updates.append("enabled = %s")
+        values.append(update_data["enabled"])
 
     if not updates:
         raise HTTPException(status_code=400, detail="No Valid Fields To Update")

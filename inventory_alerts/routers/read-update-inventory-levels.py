@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from inventory_alerts.db import connect_db
+from pydantic import BaseModel
 
 router = APIRouter()
+
+class InventoryLevelUpdateRequest(BaseModel):
+    quantity: int
 
 #Inventory Levels/Read
 
@@ -43,12 +47,10 @@ def read_inventory_level(product_id: int):
 
 #Update
 
-@router.put("/inventory-levels/{product_id}")
-def update_inventory_level(product_id: int, data: dict):
-    if "quantity" not in data:
-        raise HTTPException(status_code=400, detail="Missing 'Quantity' Field")
-
-    quantity = data["quantity"]
+@router.patch("/inventory-levels/{product_id}")
+def update_inventory_level(product_id: int, data: InventoryLevelUpdateRequest):
+    if data.quantity < 0:
+        raise HTTPException(status_code=400, detail="Negative Quantity")
 
     with connect_db() as conn:
         result = conn.execute("""
@@ -56,7 +58,7 @@ def update_inventory_level(product_id: int, data: dict):
             SET quantity = %s
             WHERE product_id = %s
             RETURNING product_id, quantity, updated_at
-        """, (quantity, product_id)).fetchone()
+        """, (data.quantity, product_id)).fetchone()
 
     if not result:
         raise HTTPException(status_code=404, detail="Inventory Level Not Found")

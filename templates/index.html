@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card alerts">
+<h2>Low-Stock Alerts</h2>
+{% if low_stock %}
+<p><strong>{{ low_stock|length }}</strong> product(s) are below threshold.</p>
+<ul>{% for item in low_stock %}<li><strong>{{ item.sku }}</strong> — {{ item.name }} (Qty: {{ item.current_quantity }}, Threshold: {{ item.threshold_qty }})</li>{% endfor %}</ul>
+{% if session.get('role') == 'admin' %}
+<form action="/send-alerts" method="POST"><button class="primary" type="submit">Send Low-Stock Email Alerts</button></form>
+{% endif %}
+{% else %}<p>No low-stock alerts right now.</p>{% endif %}
+</div>
+
+{% if session.get('role') == 'admin' %}
+<div class="card">
+<h2>Add Product</h2>
+<form action="/add" method="POST">
+<input type="text" name="sku" placeholder="SKU" required>
+<input type="text" name="name" placeholder="Product Name" required>
+<input type="text" name="description" placeholder="Description">
+<input type="number" name="quantity" placeholder="Quantity" required>
+<input type="number" name="threshold" placeholder="Threshold" required>
+<button class="primary" type="submit">Add Product</button>
+</form>
+</div>
+{% endif %}
+
+<div class="card">
+<h2>Products</h2>
+<table>
+<thead><tr><th>ID</th><th>Product</th><th>Status</th>{% if session.get('role') == 'admin' %}<th>Delete</th>{% endif %}</tr></thead>
+<tbody>
+{% for product in products %}
+<tr>
+<td>{{ product.product_id }}</td>
+<td>
+{% if session.get('role') == 'admin' %}
+<form class="row-form" action="/edit/{{ product.product_id }}" method="POST">
+<input type="text" name="sku" value="{{ product.sku }}" required>
+<input type="text" name="name" value="{{ product.name }}" required>
+<input type="text" name="description" value="{{ product.description }}">
+<input type="number" name="quantity" value="{{ product.current_quantity }}" required>
+<input type="number" name="threshold" value="{{ product.threshold_qty }}" required>
+<button class="primary" type="submit">Save</button>
+</form>
+{% else %}
+<strong>{{ product.sku }}</strong><br>
+{{ product.name }}<br>
+<span class="muted">{{ product.description }}</span><br>
+Qty: {{ product.current_quantity }} | Threshold: {{ product.threshold_qty }}
+{% endif %}
+</td>
+<td class="{% if product.stock_status == 'LOW STOCK' %}low{% else %}ok{% endif %}">{{ product.stock_status }}</td>
+{% if session.get('role') == 'admin' %}
+<td><form class="inline" action="/delete/{{ product.product_id }}" method="POST" onsubmit="return confirm('Delete this product?');"><button class="danger" type="submit">Delete</button></form></td>
+{% endif %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

@@ -1,10 +1,37 @@
-FROM maven:3.9.8-eclipse-temurin-17 AS build
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn clean package -DskipTests
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
 
-FROM eclipse-temurin:17-jre
-WORKDIR /app
-COPY --from=build /app/target/postgres-inventory-alerts-0.0.1-SNAPSHOT.jar app.jar
-CMD ["java", "-jar", "app.jar", "run-worker"]
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://inventory_user:inventory_pass@db:5432/inventory_db
+      FLASK_APP: app.py
+      FLASK_ENV: development
+      ALERT_FROM_EMAIL: your_email@example.com
+      ALERT_TO_EMAIL: your_email@example.com
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USERNAME: your_email@example.com
+      SMTP_PASSWORD: your_app_password
+      SMTP_USE_TLS: "true"
+    ports:
+      - "5000:5000"
+
+volumes:
+  postgres_data:

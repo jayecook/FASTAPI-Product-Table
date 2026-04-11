@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:40px auto;">
+  <h2>Login</h2>
+  <form method="POST">
+    <input type="email" name="email" placeholder="Email" required style="width:95%;">
+    <input type="password" name="password" placeholder="Password" required style="width:95%;">
+    <button class="primary" type="submit">Login</button>
+  </form>
+  <p>Need an account? <a href="{{ url_for('register') }}">Register here</a></p>
+  <p><strong>Demo Admin:</strong> admin@example.com / Admin123!</p>
+  <p><strong>Demo User:</strong> user@example.com / User123!</p>
+</div>
+{% endblock %}

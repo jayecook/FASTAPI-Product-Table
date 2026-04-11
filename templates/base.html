@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory Manager</title>
+<style>
+body{font-family:Arial,sans-serif;margin:24px;background:#f4f6f8}.wrap{max-width:1200px;margin:0 auto}.card{background:#fff;padding:18px;margin-bottom:20px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.08)}.flash{padding:10px 12px;border-radius:8px;margin-bottom:10px}.flash.success{background:#e8f7ea;color:#206a31}.flash.error{background:#fdeaea;color:#8e1f1f}.alerts{background:#fff7e6;border-left:6px solid #ffb020}.low{color:#b42318;font-weight:bold}.ok{color:#067647;font-weight:bold}form.inline{display:inline}input,select{padding:8px;margin:4px}button{padding:8px 12px;cursor:pointer}table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:10px;border:1px solid #ddd;text-align:left;vertical-align:top}th{background:#222;color:#fff}.row-form input{width:110px}.row-form input[name="description"]{width:180px}.danger{background:#c62828;color:#fff;border:none}.primary{background:#1d4ed8;color:#fff;border:none}.nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.muted{color:#666}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="nav">
+  <div><strong>Inventory Manager</strong></div>
+  <div>
+    {% if current_user %}
+      <span class="muted">{{ current_user.full_name }} ({{ current_user.role }})</span>
+      <a href="{{ url_for('logout') }}">Logout</a>
+    {% endif %}
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}<div class="card">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

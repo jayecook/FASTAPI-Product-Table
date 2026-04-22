@@ -1,170 +1,244 @@
-from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, session
-from inventory_crud import (
-    get_all_products,
-    add_product,
-    update_product,
-    delete_product,
-    get_low_stock_products,
-    send_low_stock_emails,
-    create_user,
-    authenticate_user,
-    get_user_by_id,
+from fastapi import FastAPI, Request, Form, Depends
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import User, Product
+from auth import verify_password
+from email_utils import send_low_stock_email
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "fallbacksecret")
 )
 
-app = Flask(__name__)
-app.secret_key = "change-me-in-production"
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 
-def login_required(view_func):
-    @wraps(view_func)
-    def wrapper(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Please log in first.", "error")
-            return redirect(url_for("login"))
-        return view_func(*args, **kwargs)
-    return wrapper
+def safe_int(value: str):
+    if value is None:
+        return None
+    value = value.strip()
+    if value == "":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
-def admin_required(view_func):
-    @wraps(view_func)
-    def wrapper(*args, **kwargs):
-        if "user_id" not in session:
-            flash("Please log in first.", "error")
-            return redirect(url_for("login"))
-        if session.get("role") != "admin":
-            flash("Admin access only.", "error")
-            return redirect(url_for("home"))
-        return view_func(*args, **kwargs)
-    return wrapper
+@app.get("/", response_class=HTMLResponse)
+def landing_page(
+    request: Request,
+    name: str = "",
+    min_stock: str = "",
+    max_stock: str = "",
+    min_amount: str = "",
+    max_amount: str = "",
+    low_stock_only: str = "",
+    db: Session = Depends(get_db)
+):
+    query = db.query(Product)
+
+    if name.strip():
+        query = query.filter(Product.name.ilike(f"%{name.strip()}%"))
+
+    min_stock_val = safe_int(min_stock)
+    max_stock_val = safe_int(max_stock)
+    min_amount_val = safe_int(min_amount)
+    max_amount_val = safe_int(max_amount)
+
+    if min_stock_val is not None:
+        query = query.filter(Product.stock >= min_stock_val)
+
+    if max_stock_val is not None:
+        query = query.filter(Product.stock <= max_stock_val)
+
+    if min_amount_val is not None:
+        query = query.filter(Product.amount >= min_amount_val)
+
+    if max_amount_val is not None:
+        query = query.filter(Product.amount <= max_amount_val)
+
+    products = query.all()
+
+    if low_stock_only == "yes":
+        products = [p for p in products if p.stock <= p.amount * 0.25]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "request": request,
+            "products": products,
+            "error": "",
+            "filters": {
+                "name": name,
+                "min_stock": min_stock,
+                "max_stock": max_stock,
+                "min_amount": min_amount,
+                "max_amount": max_amount,
+                "low_stock_only": low_stock_only
+            }
+        }
+    )
 
 
-@app.context_processor
-def inject_user():
-    current_user = None
-    if session.get("user_id"):
+@app.post("/login")
+def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    username = username.strip()
+    user = db.query(User).filter(User.username == username).first()
+
+    if user and verify_password(password, user.password_hash) and user.role == "admin":
+        request.session["is_admin"] = True
+        request.session["username"] = user.username
+        return RedirectResponse(url="/admin", status_code=303)
+
+    products = db.query(Product).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "request": request,
+            "products": products,
+            "error": "Invalid admin login.",
+            "filters": {
+                "name": "",
+                "min_stock": "",
+                "max_stock": "",
+                "min_amount": "",
+                "max_amount": "",
+                "low_stock_only": ""
+            }
+        }
+    )
+
+
+@app.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page(request: Request, db: Session = Depends(get_db)):
+    if not request.session.get("is_admin"):
+        return RedirectResponse(url="/", status_code=303)
+
+    products = db.query(Product).order_by(Product.id.asc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={
+            "request": request,
+            "products": products,
+            "admin_username": request.session.get("username", "admin")
+        }
+    )
+
+
+@app.post("/admin/add")
+def add_product(
+    request: Request,
+    name: str = Form(...),
+    stock: int = Form(...),
+    amount: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    if not request.session.get("is_admin"):
+        return RedirectResponse(url="/", status_code=303)
+
+    name = name.strip()
+
+    if not name or stock < 0 or amount < 0:
+        return RedirectResponse(url="/admin", status_code=303)
+
+    try:
+        product = Product(name=name, stock=stock, amount=amount)
+        db.add(product)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        if stock <= amount * 0.25:
+            send_low_stock_email(name, stock, amount)
+    except Exception as e:
+        print("Email warning:", e)
+
+    return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.post("/admin/update/{product_id}")
+def update_product(
+    request: Request,
+    product_id: int,
+    name: str = Form(...),
+    stock: int = Form(...),
+    amount: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    if not request.session.get("is_admin"):
+        return RedirectResponse(url="/", status_code=303)
+
+    name = name.strip()
+
+    if not name or stock < 0 or amount < 0:
+        return RedirectResponse(url="/admin", status_code=303)
+
+    product = db.query(Product).filter(Product.id == product_id).first()
+
+    if product:
         try:
-            current_user = get_user_by_id(session["user_id"])
+            product.name = name
+            product.stock = stock
+            product.amount = amount
+            db.commit()
         except Exception:
-            current_user = None
-    return {"current_user": current_user}
+            db.rollback()
+            raise
 
-
-@app.route("/")
-@login_required
-def home():
-    try:
-        products = get_all_products()
-        low_stock = get_low_stock_products()
-    except Exception as e:
-        products, low_stock = [], []
-        flash(f"Error loading data: {e}", "error")
-    return render_template("index.html", products=products, low_stock=low_stock)
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
         try:
-            full_name = request.form.get("full_name", "").strip()
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-            role = request.form.get("role", "user").strip().lower()
-            if role not in ("user", "admin"):
-                role = "user"
-
-            create_user(full_name=full_name, email=email, password=password, role=role)
-            flash("Account created. Please log in.", "success")
-            return redirect(url_for("login"))
+            if stock <= amount * 0.25:
+                send_low_stock_email(name, stock, amount)
         except Exception as e:
-            flash(f"Error creating account: {e}", "error")
-    return render_template("register.html")
+            print("Email warning:", e)
+
+    return RedirectResponse(url="/admin", status_code=303)
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
+@app.post("/admin/delete/{product_id}")
+def delete_product(
+    request: Request,
+    product_id: int,
+    db: Session = Depends(get_db)
+):
+    if not request.session.get("is_admin"):
+        return RedirectResponse(url="/", status_code=303)
+
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product:
         try:
-            email = request.form.get("email", "").strip().lower()
-            password = request.form.get("password", "")
-            user = authenticate_user(email, password)
-            if not user:
-                flash("Invalid email or password.", "error")
-                return render_template("login.html")
+            db.delete(product)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
-            session["user_id"] = user["user_id"]
-            session["role"] = user["role"]
-            session["full_name"] = user["full_name"]
-            flash(f"Welcome, {user['full_name']}!", "success")
-            return redirect(url_for("home"))
-        except Exception as e:
-            flash(f"Login error: {e}", "error")
-    return render_template("login.html")
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    flash("You have been logged out.", "success")
-    return redirect(url_for("login"))
-
-
-@app.route("/add", methods=["POST"])
-@admin_required
-def add():
-    try:
-        add_product(
-            sku=request.form.get("sku", "").strip(),
-            name=request.form.get("name", "").strip(),
-            description=request.form.get("description", "").strip(),
-            initial_quantity=int(request.form.get("quantity", 0)),
-            threshold_qty=int(request.form.get("threshold", 10)),
-        )
-        flash("Product added.", "success")
-    except Exception as e:
-        flash(f"Error adding product: {e}", "error")
-    return redirect(url_for("home"))
-
-
-@app.route("/edit/<int:product_id>", methods=["POST"])
-@admin_required
-def edit(product_id):
-    try:
-        update_product(
-            product_id=product_id,
-            sku=request.form.get("sku", "").strip(),
-            name=request.form.get("name", "").strip(),
-            description=request.form.get("description", "").strip(),
-            quantity=int(request.form.get("quantity", 0)),
-            threshold_qty=int(request.form.get("threshold", 10)),
-        )
-        flash("Product updated.", "success")
-    except Exception as e:
-        flash(f"Error updating product: {e}", "error")
-    return redirect(url_for("home"))
-
-
-@app.route("/delete/<int:product_id>", methods=["POST"])
-@admin_required
-def remove(product_id):
-    try:
-        deleted = delete_product(product_id, force=True)
-        flash(f"Deleted {deleted['sku']}.", "success")
-    except Exception as e:
-        flash(f"Error deleting product: {e}", "error")
-    return redirect(url_for("home"))
-
-
-@app.route("/send-alerts", methods=["POST"])
-@admin_required
-def send_alerts():
-    try:
-        count = send_low_stock_emails()
-        flash(f"Sent {count} low-stock email(s).", "success")
-    except Exception as e:
-        flash(f"Error sending alerts: {e}", "error")
-    return redirect(url_for("home"))
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    return RedirectResponse(url="/admin", status_code=303)

@@ -17,4 +17,8 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     stock = Column(Integer, nullable=False)
+<<<<<<< HEAD
     amount = Column(Integer, nullable=False)
+=======
+    amount = Column(Integer, nullable=False)
+>>>>>>> b04b50b8ca3a8d6b8544cae833fe8bb756ca0cc6

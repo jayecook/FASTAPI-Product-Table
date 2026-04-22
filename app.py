@@ -241,4 +241,8 @@ def delete_product(
             db.rollback()
             raise
 
+<<<<<<< HEAD
     return RedirectResponse(url="/admin", status_code=303)
+=======
+    return RedirectResponse(url="/admin", status_code=303)
+>>>>>>> b04b50b8ca3a8d6b8544cae833fe8bb756ca0cc6

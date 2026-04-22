@@ -40,4 +40,8 @@ This item has reached 25% or less of its total amount.
             server.send_message(msg)
         print(f"Low stock email sent for {product_name}")
     except Exception as e:
+<<<<<<< HEAD
         print("Email error:", e)
+=======
+        print("Email error:", e)
+>>>>>>> b04b50b8ca3a8d6b8544cae833fe8bb756ca0cc6

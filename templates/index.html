@@ -1,62 +1,88 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="card alerts">
-<h2>Low-Stock Alerts</h2>
-{% if low_stock %}
-<p><strong>{{ low_stock|length }}</strong> product(s) are below threshold.</p>
-<ul>{% for item in low_stock %}<li><strong>{{ item.sku }}</strong> — {{ item.name }} (Qty: {{ item.current_quantity }}, Threshold: {{ item.threshold_qty }})</li>{% endfor %}</ul>
-{% if session.get('role') == 'admin' %}
-<form action="/send-alerts" method="POST"><button class="primary" type="submit">Send Low-Stock Email Alerts</button></form>
-{% endif %}
-{% else %}<p>No low-stock alerts right now.</p>{% endif %}
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Landing Page</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="page-container">
 
-{% if session.get('role') == 'admin' %}
-<div class="card">
-<h2>Add Product</h2>
-<form action="/add" method="POST">
-<input type="text" name="sku" placeholder="SKU" required>
-<input type="text" name="name" placeholder="Product Name" required>
-<input type="text" name="description" placeholder="Description">
-<input type="number" name="quantity" placeholder="Quantity" required>
-<input type="number" name="threshold" placeholder="Threshold" required>
-<button class="primary" type="submit">Add Product</button>
-</form>
-</div>
-{% endif %}
+        <div class="top-bar">
+            <div>
+                <h1>Inventory Management System</h1>
+                <p class="subtext">Browse inventory below. Admins can log in from the top right.</p>
+            </div>
 
-<div class="card">
-<h2>Products</h2>
-<table>
-<thead><tr><th>ID</th><th>Product</th><th>Status</th>{% if session.get('role') == 'admin' %}<th>Delete</th>{% endif %}</tr></thead>
-<tbody>
-{% for product in products %}
-<tr>
-<td>{{ product.product_id }}</td>
-<td>
-{% if session.get('role') == 'admin' %}
-<form class="row-form" action="/edit/{{ product.product_id }}" method="POST">
-<input type="text" name="sku" value="{{ product.sku }}" required>
-<input type="text" name="name" value="{{ product.name }}" required>
-<input type="text" name="description" value="{{ product.description }}">
-<input type="number" name="quantity" value="{{ product.current_quantity }}" required>
-<input type="number" name="threshold" value="{{ product.threshold_qty }}" required>
-<button class="primary" type="submit">Save</button>
-</form>
-{% else %}
-<strong>{{ product.sku }}</strong><br>
-{{ product.name }}<br>
-<span class="muted">{{ product.description }}</span><br>
-Qty: {{ product.current_quantity }} | Threshold: {{ product.threshold_qty }}
-{% endif %}
-</td>
-<td class="{% if product.stock_status == 'LOW STOCK' %}low{% else %}ok{% endif %}">{{ product.stock_status }}</td>
-{% if session.get('role') == 'admin' %}
-<td><form class="inline" action="/delete/{{ product.product_id }}" method="POST" onsubmit="return confirm('Delete this product?');"><button class="danger" type="submit">Delete</button></form></td>
-{% endif %}
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-{% endblock %}
+            <div class="login-card">
+                <form action="/login" method="post">
+                    <h3>Admin Login</h3>
+                    <input type="text" name="username" placeholder="Username" required>
+                    <input type="password" name="password" placeholder="Password" required>
+                    <button type="submit">Login</button>
+                </form>
+
+                {% if error %}
+                    <p class="error-text">{{ error }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Filter Inventory</h2>
+            <form action="/" method="get" class="filter-form">
+                <input type="text" name="name" placeholder="Product name" value="{{ filters.name }}">
+                <input type="number" name="min_stock" placeholder="Min stock" value="{{ filters.min_stock }}">
+                <input type="number" name="max_stock" placeholder="Max stock" value="{{ filters.max_stock }}">
+                <input type="number" name="min_amount" placeholder="Min amount" value="{{ filters.min_amount }}">
+                <input type="number" name="max_amount" placeholder="Max amount" value="{{ filters.max_amount }}">
+
+                <label class="checkbox-row">
+                    <input type="checkbox" name="low_stock_only" value="yes"
+                    {% if filters.low_stock_only == 'yes' %}checked{% endif %}>
+                    Show low stock only
+                </label>
+
+                <div class="button-row">
+                    <button type="submit">Filter</button>
+                    <a href="/" class="reset-link">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Current Inventory</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Stock</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ product.id }}</td>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.stock }}</td>
+                        <td>{{ product.amount }}</td>
+                        <td>
+                            {% if product.stock <= product.amount * 0.25 %}
+                                <span class="low-stock">Low Stock</span>
+                            {% else %}
+                                <span class="good-stock">OK</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>

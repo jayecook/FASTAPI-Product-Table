@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Inventory Page</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="page-container">
+
+        <div class="top-bar">
+            <div>
+                <h1>Admin Inventory Dashboard</h1>
+                <p class="subtext">Logged in as: <strong>{{ admin_username }}</strong></p>
+            </div>
+
+            <div>
+                <a href="/logout" class="logout-button">Logout</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Add New Inventory Item</h2>
+            <form action="/admin/add" method="post" class="admin-add-form">
+                <input type="text" name="name" placeholder="Product Name" required>
+                <input type="number" name="stock" placeholder="Stock" required>
+                <input type="number" name="amount" placeholder="Amount" required>
+                <button type="submit">Add Product</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Edit or Delete Inventory</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Stock</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Update</th>
+                        <th>Delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <form action="/admin/update/{{ product.id }}" method="post">
+                            <td>{{ product.id }}</td>
+                            <td><input type="text" name="name" value="{{ product.name }}" required></td>
+                            <td><input type="number" name="stock" value="{{ product.stock }}" required></td>
+                            <td><input type="number" name="amount" value="{{ product.amount }}" required></td>
+                            <td>
+                                {% if product.stock <= product.amount * 0.25 %}
+                                    <span class="low-stock">Low Stock</span>
+                                {% else %}
+                                    <span class="good-stock">OK</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="submit">Update</button>
+                            </td>
+                        </form>
+                        <td>
+                            <form action="/admin/delete/{{ product.id }}" method="post"
+                                  onsubmit="return confirm('Delete this product?');">
+                                <button type="submit" class="delete-button">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</body>
+</html>
